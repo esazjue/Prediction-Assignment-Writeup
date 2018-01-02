@@ -1,0 +1,111 @@
+---
+title: "Activity Prediction Assignment"
+author: "Juan Sánchez"
+date: "28 de diciembre de 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r echo=FALSE,message=FALSE}
+library(caret)
+library(randomForest)
+require(reshape2)
+require(ggplot2)
+require(GGally)
+
+```
+
+```{r echo=FALSE}
+setwd('C:\\Users\\esazjue\\OneDrive - Ericsson AB\\Ericsson\\DataMining\\Specialization\\Course_8\\week_4\\project')
+trainingData <- read.csv("pml-training.csv", header = TRUE, sep = ",", quote = "\"", na.strings=c("NA","#DIV/0!",""))
+
+testData <- read.csv("pml-testing.csv", header = TRUE, sep = ",", quote = "\"", na.strings=c("NA","#DIV/0!",""))
+
+```
+
+
+## Introduction
+The goal of this project is to predict the manner in which 6 people did some exercises using data from accelerometers on the belt, forearm, arm, and dumbell. Besides those data, for each realization we have the "classe" which indicates how well the exercise was performed. Data was provided by Human Activities Recognition project (http:/groupware.les.inf.puc-rio.br/har).
+
+## Preparing and cleaning the data
+Removing columns in which there is at least one NA value. This approach can be very restrictive but it's a starting point. If the results obtained with the models are not good enough a different approach can be evaluated (e.g. only removing columns in which all values are NAs first and, then, removing just the rows with NAs).
+
+```{r}
+# Only columns w/o NAs are selected
+trainingData_1 <-  trainingData[, colSums(is.na(trainingData)) == 0]
+```
+Keeping only attributes corresponding to accelerometers' data. Again this approach can be revisited later if needed.
+```{r}
+testData_1<- testData[c(8:60)]
+trainingData_1<- trainingData_1[c(8:60)]
+```
+Creating training and test subsets for crossvalidation:
+```{r}
+# Creating train and test for cross validation
+inTrain <- createDataPartition(y=trainingData_1$classe, p=0.70, list=FALSE)
+train <- trainingData_1[inTrain, ] 
+test<- trainingData_1[-inTrain, ]
+```
+
+
+## Building the models 
+First step is setting a seed for the sake of reproductibility.
+```{r}
+set.seed(11234)
+```
+Different models among the ones presented in the course will be applied here until either significative good results are obtained with one of them or all of them are applied unsucessfully.
+
+### First model: Trees
+The first attempt will be using *trees* through *caret* library. The model is built with the train dataset created before.
+```{r}
+# R trees
+modFit.rpart <- train(classe ~ .,method="rpart",data=train)
+save(modFit.rpart, file="modFit.rpart.Rdata")
+print(modFit.rpart$finalModel)
+```
+
+The tree generated can be plotted with *rattle*;
+```{r echo=FALSE,message=FALSE}
+library(rattle)
+fancyRpartPlot(modFit.rpart$finalModel)
+```
+Results obtained applying the model on the train dataset are not promossing.
+```{r}
+confusionMatrix(train$classe,predict(modFit.rpart,train[-c(53)]))
+```
+
+In order to really estimated the goddness of the model, out of sample error is calculated with the test dataset.
+```{r}
+confusionMatrix(test$classe,predict(modFit.rpart,test[-c(53)]))
+```
+By a simple inspection if the confusion matrix and taking into account that the low accuracy (0.4989), *trees* are discarded.
+
+
+### Second model: Random Forrest
+Next step will be applying Random Forrest algorithm. Due to some performance issues found with its implementation in *caret*, the library *randomForrest* is used in this part.
+```{r}
+# Random forrest
+modFit.rf <- randomForest(classe ~ ., data=train)
+save(modFit.rf, file="modFit.rf.Rdata")
+cf.rf.train <- confusionMatrix(train$classe,predict(modFit.rf,train[-c(53)]))
+cf.rf.train
+```
+
+As before, out of sample error is calculated with the test dataset.
+```{r}
+confusionMatrix(test$classe,predict(modFit.rf,test[-c(53)]))
+```
+Confussion matrix is much better now, as they are accuray (0.9947) and Kappa (0.9933) values. Results are considered good enough so there is no need of applying more algotihm or to consider a different approach for the ones followed to handle NA's values.
+
+## Conclusions
+After analyzing the obtained results, it cam be concluded that Random Forrest algorithm is a sensitive alternative to determined whether or not exercise was properly performed based on accelerometers readings.
+
+For the sake of completeness, predictions obtained after applying the algorithm to the testData follow:
+
+```{r  }
+predict(modFit.rf,testData)
+```
+
